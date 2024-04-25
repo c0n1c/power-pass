@@ -133,6 +133,19 @@ foreach ($serveur in $serveursUnix) {
         }
     }
     finally {
+        # Enregistrer la modification du mot de passe dans le Keepass
+        # Récupérer l'entrée KeePass correspondante à l'adresse IP ou au nom du serveur Unix
+        $entry = Get-KeePassEntry -DatabaseProfileName "Default" | Where-Object { $_.ParentGroup -eq $nomGroup -and $_.URL -eq $adresseIP }
+        
+        # Vérifier si une entrée correspondante a été trouvée
+        if ($entry -ne $null) {
+            # Mettre à jour le champ de mot de passe de l'entrée avec le nouveau mot de passe
+            Set-KeePassEntry -Entry $entry -Password $nouveauMotDePasse
+            Write-Host "Le nouveau mot de passe a été enregistré dans KeePass pour $adresseIP."
+        } else {
+            Write-Host "Aucune entrée correspondante trouvée dans KeePass pour $adresseIP."
+        }
+
         # Fermer la session SSH
         if ($sessionSSH) {
             Remove-SSHSession -SSHSession $sessionSSH
