@@ -29,21 +29,68 @@ PublicKeyToken=b03f5f7f11d50a3a', désinstaller Powershell 7.
 Import-Module Posh-SSH
 Import-Module PoShKeePass
 
+# Nom du groupe à traiter (non sensible à la case)
+$nomGroup = "unix"
+
+# Nom de la base de donnée Keepass
+$nomBaseDeDonnee = "database"
+
 # Chemin vers la base de données Keepass
-$cheminBaseDeDonnees = "C:\Users\user\Downloads\database.kdbx"
+$cheminBaseDeDonnees = "C:\Users\user\Downloads\$nomBaseDeDonnee.kdbx"
+
+function BackupKeepass {
+    # Chemin de destination pour la copie du fichier Keepass avec la date du jour
+    $cheminDestination = "C:\Users\user\Downloads\keepass_backup_$(Get-Date -Format 'yyyyMMdd').kdbx"
+
+    # Copier le fichier Keepass vers le chemin de destination
+    Copy-Item -Path $cheminBaseDeDonnees -Destination $cheminDestination -Force
+
+    # Renommer le fichier avec la date du jour
+    Rename-Item -Path $cheminDestination -NewName ("keepass_backup_$(Get-Date -Format 'yyyyMMdd').kdbx") -Force
+}
+
+function ImporterNouveauxServeursDansKeepass {
+    # Demander à l'utilisateur s'il veut importer de nouveaux serveurs
+    $reponse = Read-Host "Voulez-vous importer de nouveaux serveurs dans Keepass ? (O/N)"
+    if ($reponse -eq "O" -or $reponse -eq "o") {
+        try {
+            # Chemin du fichier CSV contenant les informations des serveurs
+            $cheminFichierCSV = "C:\Users\user\Downloads\cmdb.csv"
+            
+            # Récupérer les serveurs existants dans le Keepass
+            $serveursExistants = Get-KeePassEntry -AsPlainText -DatabaseProfileName "Default" | Where-Object { $_.ParentGroup -eq $nomGroup -and $_.URL -ne $null }
+            
+            # Importer les nouveaux serveurs depuis le fichier CSV
+            $nouveauxServeurs = Import-Csv $cheminFichierCSV
+            foreach ($serveur in $nouveauxServeurs) {
+                $adresseIP = $serveur.hostname
+                $title = $serveur.os
+                
+                # Vérifier si le serveur est déjà dans la liste
+                $serveurExiste = $serveursExistants | Where-Object { $_.URL -eq $adresseIP }
+                
+                # Ajouter le serveur au Keepass s'il n'existe pas déjà
+                if (-not $serveurExiste) {
+                    New-KeePassEntry -DatabaseProfileName "Default" -KeePassEntryGroupPath "$nomBaseDeDonnee/$nomGroup" -Title $title -URL $adresseIP -Notes "Nouveau serveur ajouté automatiquement le $(Get-Date -Format 'yyyy-MM-dd')"
+                    Write-Host "Le serveur $adresseIP a été ajouté à Keepass."
+                }
+            }
+            Write-Host "Fin de l'importation dans le Keepass."
+        }
+        catch {
+            Write-Host "Une erreur s'est produite lors de l'importation des nouveaux serveurs dans Keepass : $_"
+        }
+    }
+    else {
+        Write-Host "L'importation a été annulée par l'utilisateur."
+    }
+}
 
 # Créer un backup de la base de donnée de Keepass
-# Chemin de destination pour la copie du fichier Keepass avec la date du jour
-$cheminDestination = "C:\Users\user\Downloads\keepass_backup_$(Get-Date -Format 'yyyyMMdd').kdbx"
+BackupKeepass
 
-# Copier le fichier Keepass vers le chemin de destination
-Copy-Item -Path $cheminBaseDeDonnees -Destination $cheminDestination -Force
-
-# Renommer le fichier avec la date du jour
-Rename-Item -Path $cheminDestination -NewName ("keepass_backup_$(Get-Date -Format 'yyyyMMdd').kdbx") -Force
-
-# Chemin du groupe à traiter (non sensible à la case)
-$nomGroup = "unix"
+# Importation des serveurs d'une CMDB dans le Keepass
+ImporterNouveauxServeursDansKeepass
 
 # Mise en place d'un profile dans la configuration Keepass
 try {
@@ -66,7 +113,7 @@ catch {
 # Génération du mot de passe
 function GenererMotDePasse {
     $longueurMinimale = 15
-    $caracteresSpeciaux = '!@#$%&*()-_=+'
+    $caracteresSpeciaux = '!@#$%&*-_=+'
     $caracteresMajuscules = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     $caracteresMinuscules = 'abcdefghijklmnopqrstuvwxyz'
     $chiffres = '0123456789'
@@ -95,61 +142,19 @@ foreach ($serveur in $serveursUnix) {
     # Récupérer les informations du serveur
     $adresseIP = $serveur.URL
     $utilisateurSSH = $serveur.UserName
-    $motDePasseUtilisateur = ConvertTo-SecureString $serveur.Password -AsPlainText -Force
-    $credential = New-Object System.Management.Automation.PSCredential ($utilisateurSSH, $motDePasseUtilisateur)
+    $motDePasseEncrypted = ConvertTo-SecureString -String $motDePasseUtilisateur -AsPlainText -Force
 
+    # Générer un nouveau mot de passe
+    $nouveauMotDePasse = GenererMotDePasse
+    
     # Tenter de se connecter au serveur via SSH
     try {
-        $sessionSSH = New-SSHSession -ComputerName $adresseIP -Credential $credential
-        
-        # Si la connexion est réussie, afficher un message
-        Write-Host "Connexion réussie à $adresseIP"
-        
-        # Générer un nouveau mot de passe
-        $nouveauMotDePasse = GenererMotDePasse
-
-        # Répondre à la demande de changement de mot de passe en envoyant le nouveau mot de passe
-        # Invoke-SSHCommand -SSHSession $sessionSSH -Command "echo '$motDePasseUtilisateur`n$nouveauMotDePasse`n$nouveauMotDePasse' | passwd"
-        Invoke-SSHCommand -SSHSession $sessionSSH -Command "printf '%s\n' $motDePasseUtilisateur $nouveauMotDePasse $nouveauMotDePasse | passwd"
-    
-        # Afficher un message indiquant que le mot de passe a été changé avec succès
-        Write-Host "Mot de passe changé avec succès pour $utilisateurSSH sur $adresseIP. Nouveau mot de passe : $nouveauMotDePasse"
+        # Exécuter le script Expect avec les arguments appropriés
+        $expectScriptPath = "C:\Users\user\Downloads\passwd.exp"
+        Start-Process -FilePath "expect" -ArgumentList "$expectScriptPath", $motDePasseEncrypted, $adresseIP, $utilisateurSSH, $nouveauMotDePasse -NoNewWindow -Wait
     }
     catch {
-        # Si une erreur se produit, vérifier si c'est une demande de changement de mot de passe
-        if ($_ -match "change your password"  -or $_ -match "changer votre mot de passe") {
-            # Générer un nouveau mot de passe
-            $nouveauMotDePasse = GenererMotDePasse
-
-            # Répondre à la demande de changement de mot de passe en envoyant le nouveau mot de passe
-            Invoke-SSHCommand -SSHSession $sessionSSH -Command "echo '$motDePasseUtilisateur`n$nouveauMotDePasse`n$nouveauMotDePasse' | passwd"
-
-            # Afficher un message indiquant que le mot de passe a été changé avec succès
-            Write-Host "Mot de passe changé avec succès pour $utilisateurSSH sur $adresseIP. Nouveau mot de passe : $nouveauMotDePasse"
-        }
-        else {
-            # Si c'est une autre erreur, afficher le message d'erreur
-            Write-Host "Une erreur s'est produite lors de la connexion de $adresseIP : $_"
-        }
-    }
-    finally {
-        # Enregistrer la modification du mot de passe dans le Keepass
-        # Récupérer l'entrée KeePass correspondante à l'adresse IP ou au nom du serveur Unix
-        $entry = Get-KeePassEntry -DatabaseProfileName "Default" | Where-Object { $_.ParentGroup -eq $nomGroup -and $_.URL -eq $adresseIP }
-        
-        # Vérifier si une entrée correspondante a été trouvée
-        if ($entry -ne $null) {
-            # Mettre à jour le champ de mot de passe de l'entrée avec le nouveau mot de passe
-            Set-KeePassEntry -Entry $entry -Password $nouveauMotDePasse
-            Write-Host "Le nouveau mot de passe a été enregistré dans KeePass pour $adresseIP."
-        } else {
-            Write-Host "Aucune entrée correspondante trouvée dans KeePass pour $adresseIP."
-        }
-
-        # Fermer la session SSH
-        if ($sessionSSH) {
-            Remove-SSHSession -SSHSession $sessionSSH
-        }
+        Write-Host "Une erreur s'est produite lors du changement de mot de passe sur $adresseIP : $_"
     }
 }
 
