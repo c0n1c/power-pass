@@ -1,4 +1,3 @@
-```markdown
 # Gestion des mots de passe pour les serveurs Unix
 
 Ce script PowerShell permet de gérer les mots de passe des comptes utilisateurs sur plusieurs serveurs Unix en utilisant SSH, en générant des mots de passe sécurisés et en les stockant dans une base de données Keepass.
@@ -46,4 +45,3 @@ Ce script est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de 
 ---
 
 Pour toute question ou suggestion, n'hésitez pas à me contacter.
-```
