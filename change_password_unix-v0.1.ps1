@@ -145,16 +145,29 @@ foreach ($serveur in $serveursUnix) {
     # Récupérer les informations du serveur
     $adresseIP = $serveur.URL
     $utilisateurSSH = $serveur.UserName
-    $motDePasseEncrypted = ConvertTo-SecureString -String $motDePasseUtilisateur -AsPlainText -Force
+    $motDePasseUtilisateur = ConvertTo-SecureString $serveur.Password -AsPlainText -Force
+    $credential = New-Object System.Management.Automation.PSCredential ($utilisateurSSH, $motDePasseUtilisateur)
 
     # Générer un nouveau mot de passe
     $nouveauMotDePasse = GenererMotDePasse
     
-    # Tenter de se connecter au serveur via SSH
     try {
-        # Exécuter le script Expect avec les arguments appropriés
-        $expectScriptPath = "C:\Users\user\Downloads\passwd.exp"
-        Start-Process -FilePath "expect" -ArgumentList "$expectScriptPath", $motDePasseEncrypted, $adresseIP, $utilisateurSSH, $nouveauMotDePasse -NoNewWindow -Wait
+        # Tenter de se connecter au serveur via SSH
+        $sessionSSH = New-SSHSession -ComputerName $adresseIP -Credential $credential -AcceptKey
+        
+        # Si la connexion est réussie, afficher un message
+        Write-Host "Connexion réussie à $adresseIP"
+
+        # Changement de mot de passe en envoyant le nouveau avec chpasswd
+        Invoke-SSHCommand -SSHSession $sessionSSH -Command "echo '${utilisateurSSH}:$nouveauMotDePasse' | sudo chpasswd"
+
+        # Afficher un message indiquant que le mot de passe a été changé avec succès
+        Write-Host "Mot de passe changé avec succès pour $utilisateurSSH sur $adresseIP. Nouveau mot de passe : $nouveauMotDePasse"
+
+        # Fermer la session SSH
+        if ($sessionSSH) {
+            Remove-SSHSession -SSHSession $sessionSSH
+        }
     }
     catch {
         Write-Host "Une erreur s'est produite lors du changement de mot de passe sur $adresseIP : $_"
@@ -162,6 +175,6 @@ foreach ($serveur in $serveursUnix) {
 }
 
 # Vérifier si la variable existe avant de la supprimer
-if (Test-Path variable:motDePasseKeepassTexte) {
-    Remove-Variable -Name motDePasseKeepassTexte -Force
+if (Test-Path variable:motDePasseKeepass) {
+    Remove-Variable -Name motDePasseKeepass -Force
 }
