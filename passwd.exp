@@ -1,0 +1,46 @@
+#!/usr/bin/expect -f
+
+# Récupérer les arguments passés au script
+set old_passwd [lindex $argv 0]
+set server [lindex $argv 1]
+set username [lindex $argv 2]
+set new_passwd [lindex $argv 3]
+
+# Afficher des messages de démarrage
+puts "Début du changement de mot de passe sur $server..."
+puts "Connexion en tant que $username@$server..."
+
+# Exécuter la commande SSH pour se connecter au serveur
+spawn ssh $username@$server
+
+# Attendre la demande de mot de passe
+expect "*?assword:*"
+
+# Envoyer l'ancien mot de passe
+send -- "$old_passwd\r"
+
+# Attendre le prompt de commande
+expect "$ "
+
+# Afficher un message avant de changer le mot de passe
+puts "Changement de mot de passe en cours..."
+
+# Exécuter la commande passwd pour changer le mot de passe
+send -- "echo -e \"$old_passwd\n$new_passwd\n$new_passwd\" | passwd\r"
+
+# Attendre la confirmation de changement de mot de passe
+expect {
+    "*password updated successfully*" {
+        send_user "Mot de passe changé avec succès.\n"
+    }
+    "*current password is incorrect*" {
+        send_user "Le mot de passe actuel est incorrect.\n"
+    }
+    timeout {
+        send_user "Timeout: La commande passwd n'a pas répondu dans le délai imparti.\n"
+    }
+}
+
+# Fermer la connexion SSH
+send -- "exit\r"
+expect eof
