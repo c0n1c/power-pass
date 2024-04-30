@@ -1,5 +1,3 @@
-Voici le contenu formaté en Markdown pour que vous puissiez le coller dans votre projet :
-
 ```markdown
 # Gestion des mots de passe pour les serveurs Unix
 
