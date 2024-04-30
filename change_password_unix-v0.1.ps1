@@ -38,6 +38,9 @@ $nomBaseDeDonnee = "database"
 # Chemin vers la base de données Keepass
 $cheminBaseDeDonnees = "C:\Users\user\Downloads\$nomBaseDeDonnee.kdbx"
 
+# Demander à l'utilisateur de saisir le mot de passe Keepass une seule fois
+$motDePasseKeepass = Read-Host -Prompt "Entrez le mot de passe Keepass" -AsSecureString
+
 function BackupKeepass {
     # Chemin de destination pour la copie du fichier Keepass avec la date du jour
     $cheminDestination = "C:\Users\user\Downloads\keepass_backup_$(Get-Date -Format 'yyyyMMdd').kdbx"
@@ -58,8 +61,8 @@ function ImporterNouveauxServeursDansKeepass {
             $cheminFichierCSV = "C:\Users\user\Downloads\cmdb.csv"
             
             # Récupérer les serveurs existants dans le Keepass
-            $serveursExistants = Get-KeePassEntry -AsPlainText -DatabaseProfileName "Default" | Where-Object { $_.ParentGroup -eq $nomGroup -and $_.URL -ne $null }
-            
+            $serveursExistants = Get-KeePassEntry -AsPlainText -DatabaseProfileName "Default" -MasterKey $motDePasseKeepass | Where-Object { $_.ParentGroup -eq $nomGroup -and $_.URL -ne $null }
+
             # Importer les nouveaux serveurs depuis le fichier CSV
             $nouveauxServeurs = Import-Csv $cheminFichierCSV
             foreach ($serveur in $nouveauxServeurs) {
@@ -71,7 +74,7 @@ function ImporterNouveauxServeursDansKeepass {
                 
                 # Ajouter le serveur au Keepass s'il n'existe pas déjà
                 if (-not $serveurExiste) {
-                    New-KeePassEntry -DatabaseProfileName "Default" -KeePassEntryGroupPath "$nomBaseDeDonnee/$nomGroup" -Title $title -URL $adresseIP -Notes "Nouveau serveur ajouté automatiquement le $(Get-Date -Format 'yyyy-MM-dd')"
+                    New-KeePassEntry -DatabaseProfileName "Default" -KeePassEntryGroupPath "$nomBaseDeDonnee/$nomGroup" -Title $title -URL $adresseIP -Notes "Nouveau serveur ajouté automatiquement le $(Get-Date -Format 'yyyy-MM-dd')" -MasterKey $motDePasseKeepass
                     Write-Host "Le serveur $adresseIP a été ajouté à Keepass."
                 }
             }
@@ -103,7 +106,7 @@ catch {
 
 # Récupérer les informations sur les serveurs Unix à partir de la base de données Keepass
 try {
-    $serveursUnix = Get-KeePassEntry -AsPlainText -DatabaseProfileName "Default" | Where-Object { $_.ParentGroup -eq $nomGroup -and $_.URL -ne $null }
+    $serveursUnix = Get-KeePassEntry -AsPlainText -DatabaseProfileName "Default" -MasterKey $motDePasseKeepass | Where-Object { $_.ParentGroup -eq $nomGroup -and $_.URL -ne $null }
 }
 catch {
     Write-Host "Erreur lors de la récupération des informations sur les serveurs Unix : $_"
